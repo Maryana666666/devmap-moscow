@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Девелопмент — база объектов — НОВАЯ ВЕРСИЯ</title>
+<style>
+*{box-sizing:border-box} body{margin:0;font-family:Arial,sans-serif;color:#202124;background:#f4f5f7}
+.app{height:100vh;display:grid;grid-template-columns:430px 1fr}
+.side{background:#fff;border-right:1px solid #ddd;display:flex;flex-direction:column;min-width:0}
+.head{padding:18px;border-bottom:1px solid #eee}.head h1{margin:0 0 5px;font-size:20px}.muted{color:#777;font-size:13px}
+.toolbar{padding:12px 18px;border-bottom:1px solid #eee;display:flex;gap:8px;flex-wrap:wrap}
+button{border:1px solid #ccc;background:#fff;border-radius:8px;padding:9px 12px;cursor:pointer;font-size:13px}
+button.primary{background:#222;color:#fff;border-color:#222} button.danger{color:#b42318}
+input,select,textarea{font:inherit;border:1px solid #ccc;border-radius:7px;padding:9px;background:#fff;width:100%}
+.filters{padding:10px 18px;border-bottom:1px solid #eee;display:grid;gap:7px}
+.list{overflow:auto;padding:8px}.card{padding:12px;border:1px solid #e5e5e5;border-radius:10px;margin-bottom:7px;cursor:pointer}
+.card:hover{background:#fafafa}.title{font-weight:700;font-size:14px}.meta{font-size:12px;color:#666;line-height:1.5;margin-top:4px}
+.badge{display:inline-block;margin-left:6px;padding:2px 6px;border-radius:10px;background:#eee;font-size:11px}
+.map{position:relative}.mapbox{height:100%;width:100%;min-height:300px}
+.maphelp{position:absolute;left:16px;top:16px;background:#fff;border-radius:9px;padding:10px 12px;box-shadow:0 2px 12px #0002;z-index:5;font-size:12px;max-width:320px}
+.empty{padding:20px;color:#777}
+.modalbg{display:none;position:fixed;inset:0;background:#0005;z-index:20;align-items:center;justify-content:center}
+.modal{background:#fff;border-radius:12px;padding:18px;width:min(620px,calc(100% - 30px));max-height:90vh;overflow:auto;box-shadow:0 10px 40px #0003}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.field{display:grid;gap:4px;font-size:12px;color:#666}.field.full{grid-column:1/-1}
+.actions{display:flex;justify-content:space-between;gap:8px;margin-top:15px}.right{display:flex;gap:8px}
+.note{font-size:12px;color:#7a5b00;background:#fff7df;padding:9px 12px;border-bottom:1px solid #eee}
+@media(max-width:850px){.app{grid-template-columns:1fr}.side{height:55vh}.map{height:45vh}}
+</style>
+<script>
+/* ВСТАВЬТЕ СЮДА СВОЙ КЛЮЧ JS API ЯНДЕКС КАРТ, если захотите карту.
+   Не отправляйте ключ в чат. */
+const YANDEX_API_KEY = "";
+</script>
+<script id="ymaps-loader"></script>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="head">
+      <h1>База объектов девелопмента</h1>
+      <div class="muted">Один список объектов + карта</div>
+    </div>
+    <div class="note">Это уже редактируемая версия: объект можно добавить, изменить или удалить прямо здесь.</div>
+    <div class="toolbar">
+      <button class="primary" onclick="newProject()">＋ Новый объект</button>
+      <button onclick="openSettings()">⚙ Настройки</button>
+    </div>
+    <div class="filters">
+      <input id="q" placeholder="Поиск по названию, адресу, метро…" oninput="render()">
+      <select id="status" onchange="render()"><option value="">Все статусы</option><option>Новый</option><option>Интересно</option><option>Изучаем</option><option>Отложен</option><option>Отказ</option></select>
+      <select id="priority" onchange="render()"><option value="">Все приоритеты</option><option>A</option><option>B</option><option>C</option></select>
+    </div>
+    <div id="list" class="list"></div>
+  </aside>
+  <main class="map"><div id="map" class="mapbox"></div><div class="maphelp" id="maphelp">Карта загружается…</div></main>
+</div>
+
+<div class="modalbg" id="modal">
+  <div class="modal">
+    <h2 id="modalTitle" style="margin-top:0">Объект</h2>
+    <div class="grid">
+      <label class="field full">Название<input id="f_name"></label>
+      <label class="field">Тип объекта<input id="f_type"></label>
+      <label class="field">Статус<select id="f_status"><option>Новый</option><option>Интересно</option><option>Изучаем</option><option>Отложен</option><option>Отказ</option></select></label>
+      <label class="field">Приоритет<select id="f_priority"><option>A</option><option>B</option><option>C</option></select></label>
+      <label class="field">Адрес<input id="f_address"></label>
+      <label class="field">Район<input id="f_district"></label>
+      <label class="field">Метро<input id="f_metro"></label>
+      <label class="field">Площадь участка<input id="f_area"></label>
+      <label class="field">Текущий GBA<input id="f_gba"></label>
+      <label class="field">Потенциал GBA<input id="f_potential"></label>
+      <label class="field">Sellable<input id="f_sellable"></label>
+      <label class="field">Цена<input id="f_price"></label>
+      <label class="field">Источник / агентство<input id="f_agency"></label>
+      <label class="field">Контакт<input id="f_contact"></label>
+      <label class="field">Телефон<input id="f_phone"></label>
+      <label class="field full">Презентация / ссылка<input id="f_presentation"></label>
+      <label class="field full">Комментарий<textarea id="f_comment" rows="3"></textarea></label>
+      <label class="field">Широта<input id="f_lat" type="number" step="0.000001"></label>
+      <label class="field">Долгота<input id="f_lon" type="number" step="0.000001"></label>
+    </div>
+    <div class="actions">
+      <button class="danger" id="deleteBtn" onclick="deleteCurrent()">Удалить</button>
+      <div class="right"><button onclick="closeModal()">Отмена</button><button class="primary" onclick="saveCurrent()">Сохранить</button></div>
+    </div>
+  </div>
+</div>
+
+<div class="modalbg" id="settings">
+ <div class="modal">
+   <h2 style="margin-top:0">Настройки</h2>
+   <p style="font-size:13px;color:#666">Здесь можно указать ключ JavaScript API Яндекс Карт. Ключ хранится только в этом браузере.</p>
+   <label class="field">Ключ JS API<input id="apiKeyInput" type="password" placeholder="Вставьте ключ сюда"></label>
+   <p style="font-size:12px;color:#777">Страница запускается через localhost. В ключе Яндекс Карт должно быть ограничение HTTP Referer = localhost.</p>
+   <div class="actions"><span></span><div class="right"><button onclick="closeSettings()">Отмена</button><button class="primary" onclick="saveKey()">Сохранить ключ</button></div></div>
+ </div>
+</div>
+
+<script>
+const DEMO=[
+{id:1,name:"Ленинградское ш., участок",type:"Земельный участок",status:"Интересно",priority:"A",address:"Ленинградское ш.",district:"",metro:"",area:"2,4 га",gba:"",potential:"45 000 м²",sellable:"",price:"1,2 млрд ₽",agency:"ABC",contact:"",phone:"",presentation:"",comment:"",lat:55.8538,lon:37.4767},
+{id:2,name:"Объект у Москва-Сити",type:"Готовый объект",status:"Изучаем",priority:"B",address:"Москва-Сити",district:"",metro:"Деловой центр",area:"",gba:"18 000 м²",potential:"",sellable:"14 500 м²",price:"3,5 млрд ₽",agency:"XYZ",contact:"",phone:"",presentation:"",comment:"",lat:55.7497,lon:37.5397},
+{id:3,name:"Варшавское ш., площадка",type:"Земельный участок",status:"Новый",priority:"A",address:"Варшавское ш.",district:"",metro:"",area:"1,1 га",gba:"",potential:"22 000 м²",sellable:"",price:"700 млн ₽",agency:"ABC",contact:"",phone:"",presentation:"",comment:"",lat:55.5820,lon:37.5990},
+{id:4,name:"Промзона на юго-востоке",type:"КРТ / развитие территории",status:"Отложен",priority:"C",address:"Юго-восток Москвы",district:"",metro:"",area:"6,8 га",gba:"",potential:"120 000 м²",sellable:"",price:"4,5 млрд ₽",agency:"DEF",contact:"",phone:"",presentation:"",comment:"",lat:55.7095,lon:37.7315},
+{id:5,name:"Объект у метро Сокол",type:"Проект реконструкции",status:"Отказ",priority:"C",address:"район Сокол",district:"",metro:"Сокол",area:"",gba:"12 000 м²",potential:"",sellable:"9 500 м²",price:"2,8 млрд ₽",agency:"GHI",contact:"",phone:"",presentation:"",comment:"",lat:55.8050,lon:37.5150}
+];
+let projects=JSON.parse(localStorage.getItem('dev_projects_v2')||'null')||DEMO;
+let currentId=null,map=null,markers=[];
+
+function persist(){localStorage.setItem('dev_projects_v2',JSON.stringify(projects));}
+function render(){
+ const q=(document.getElementById('q').value||'').toLowerCase(), s=document.getElementById('status').value,p=document.getElementById('priority').value;
+ const data=projects.filter(x=>(!q||[x.name,x.address,x.metro,x.type,x.agency].join(' ').toLowerCase().includes(q))&&(!s||x.status===s)&&(!p||x.priority===p));
+ document.getElementById('list').innerHTML=data.length?data.map(x=>`<div class="card" onclick="editProject(${x.id})"><div class="title">${esc(x.name)}<span class="badge">${x.priority}</span></div><div class="meta">${esc(x.status)} · ${esc(x.type)}<br>${esc(x.address||'Адрес не указан')}${x.metro?' · м. '+esc(x.metro):''}<br>${x.potential?'Потенциал GBA: '+esc(x.potential)+' · ':''}${esc(x.price||'Цена не указана')}</div></div>`).join(''):'<div class="empty">Ничего не найдено</div>';
+ updateMap();
+}
+function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));}
+function editProject(id){
+ const x=projects.find(a=>a.id===id);if(!x)return;currentId=id;
+ const fields=['name','type','status','priority','address','district','metro','area','gba','potential','sellable','price','agency','contact','phone','presentation','comment','lat','lon'];
+ fields.forEach(k=>document.getElementById('f_'+k).value=x[k]??'');
+ document.getElementById('modalTitle').textContent='Редактировать объект';
+ document.getElementById('deleteBtn').style.display='block';document.getElementById('modal').style.display='flex';
+}
+function newProject(){currentId=null;['name','type','status','priority','address','district','metro','area','gba','potential','sellable','price','agency','contact','phone','presentation','comment','lat','lon'].forEach(k=>document.getElementById('f_'+k).value='');document.getElementById('f_status').value='Новый';document.getElementById('f_priority').value='B';document.getElementById('modalTitle').textContent='Новый объект';document.getElementById('deleteBtn').style.display='none';document.getElementById('modal').style.display='flex';}
+function saveCurrent(){
+ const fields=['name','type','status','priority','address','district','metro','area','gba','potential','sellable','price','agency','contact','phone','presentation','comment','lat','lon'];let x={id:currentId||Date.now()};
+ fields.forEach(k=>x[k]=document.getElementById('f_'+k).value);
+ x.lat=Number(x.lat);x.lon=Number(x.lon);
+ if(currentId)projects=projects.map(a=>a.id===currentId?x:a);else projects.push(x);
+ persist();closeModal();render();
+}
+function deleteCurrent(){if(!currentId)return;if(confirm('Удалить этот объект?')){projects=projects.filter(x=>x.id!==currentId);persist();closeModal();render();}}
+function closeModal(){document.getElementById('modal').style.display='none'}
+function openSettings(){document.getElementById('apiKeyInput').value=localStorage.getItem('dev_yandex_key_v3')||YANDEX_API_KEY||'';document.getElementById('settings').style.display='flex'}
+function closeSettings(){document.getElementById('settings').style.display='none'}
+function saveKey(){localStorage.setItem('dev_yandex_key_v3',document.getElementById('apiKeyInput').value.trim());closeSettings();loadYandex();}
+
+let ymapsLoading = null;
+
+function showMapMessage(text, error) {
+  const el=document.getElementById('maphelp');
+  el.style.display='block';
+  el.textContent=text;
+  if(error) console.error('Yandex Maps error:', error);
+}
+
+async function loadYandex(){
+ const key=localStorage.getItem('dev_yandex_key_v3')||YANDEX_API_KEY;
+ if(!key){showMapMessage('Нажмите «Настройки» и вставьте ключ JavaScript API.');return;}
+ if(window.ymaps3 && window.ymaps3.YMap){
+   try { await ymaps3.ready; createMap(); return; } catch(e){ showMapMessage('Ошибка инициализации Яндекс Карт: '+(e?.message||e),e); return; }
+ }
+ if(ymapsLoading){ await ymapsLoading; return; }
+ ymapsLoading=new Promise((resolve,reject)=>{
+   const sc=document.createElement('script');
+   sc.id='ymaps-script';
+   sc.src='https://api-maps.yandex.ru/v3/?apikey='+encodeURIComponent(key)+'&lang=ru_RU';
+   sc.async=true;
+   sc.onload=()=>resolve();
+   sc.onerror=()=>reject(new Error('Не удалось загрузить скрипт Yandex JS API. Проверьте интернет и ключ JavaScript API.'));
+   document.head.appendChild(sc);
+ });
+ try{
+   await ymapsLoading;
+   await ymaps3.ready;
+   createMap();
+ }catch(e){
+   showMapMessage('Ошибка загрузки Яндекс API: '+(e?.message||e),e);
+ }finally{ ymapsLoading=null; }
+}
+
+async function createMap(){
+ try{
+   const {YMap,YMapDefaultSchemeLayer,YMapDefaultFeaturesLayer}=ymaps3;
+   if(!YMap||!YMapDefaultSchemeLayer){throw new Error('Основные компоненты JS API не найдены');}
+   if(map){ try{map.destroy();}catch(e){} map=null; markers=[]; }
+   const host=document.getElementById('map');
+   host.innerHTML='';
+   map=new YMap(host,{location:{center:[37.60,55.72],zoom:9.7}});
+   map.addChild(new YMapDefaultSchemeLayer({}));
+   if(YMapDefaultFeaturesLayer) map.addChild(new YMapDefaultFeaturesLayer({}));
+   document.getElementById('maphelp').style.display='none';
+   updateMap();
+ }catch(e){
+   showMapMessage('API загрузился, но карта не создалась: '+(e?.message||e),e);
+ }
+}
+function updateMap(){
+ if(!map||!window.ymaps3)return;
+ try{
+   const {YMapMarker}=ymaps3;
+   markers.forEach(m=>{try{map.removeChild(m)}catch(e){}});markers=[];
+   projects.forEach(x=>{
+     if(!Number.isFinite(x.lat)||!Number.isFinite(x.lon))return;
+     const el=document.createElement('div');
+     el.style.cssText='width:20px;height:20px;border-radius:50%;background:'+(x.priority==='A'?'#17803d':x.priority==='B'?'#d99a00':'#c93c37')+';border:3px solid white;box-shadow:0 1px 5px #0005;cursor:pointer';
+     el.title=x.name;
+     el.onclick=()=>editProject(x.id);
+     const m=new YMapMarker({coordinates:[x.lon,x.lat],zIndex:1000},el);
+     markers.push(m);map.addChild(m);
+   });
+ }catch(e){ showMapMessage('Ошибка при добавлении точек: '+(e?.message||e),e); }
+}
+
+render();loadYandex();
+</script>
+</body></html>
