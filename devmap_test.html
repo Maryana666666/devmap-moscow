@@ -12,7 +12,7 @@
 <header class="top"><h1>База объектов ASPACE</h1><div class="sub">Тестовая версия: карта без ключа JavaScript API</div></header>
 <div class="wrap">
 <div id="status" class="status">Загрузка данных…</div>
-<div class="note">Это отдельная тестовая страница. Основная ссылка не изменена. Здесь карта Яндекса загружается через встроенный виджет, поэтому ключ из localStorage браузера не нужен.</div>
+<div class="note">Это отдельная тестовая страница. Основная ссылка не изменена. В карте добавлены метки текущих объектов из таблицы; ключ из localStorage браузера не нужен.</div>
 <div class="filters">
 <input id="search" placeholder="Поиск по объектам…">
 <select id="statusFilter"><option value="">Все статусы</option></select>
@@ -20,7 +20,7 @@
 </div>
 <div class="layout">
 <section id="list" class="list"><div class="empty">Загрузка объектов…</div></section>
-<section class="mapbox"><iframe title="Яндекс Карты" src="https://yandex.ru/map-widget/v1/?ll=37.6176%2C55.7558&z=10&lang=ru_RU" allowfullscreen></iframe></section>
+<section class="mapbox"><iframe title="Яндекс Карты" src="https://yandex.ru/map-widget/v1/?ll=37.6047%2C55.7572&z=11&pt=37.623277%2C55.773044%2Cpm2rdm~37.58614%2C55.741404%2Cpm2rdm&lang=ru_RU" allowfullscreen></iframe></section>
 </div>
 </div>
 <script>
@@ -29,7 +29,7 @@ const CSV2='https://docs.google.com/spreadsheets/d/e/2PACX-1vTB07y0UlTuKbTTIEFXM
 let rows=[];
 function parseCSV(text){const out=[];let row=[],cell='',q=false;for(let i=0;i<text.length;i++){const c=text[i],n=text[i+1];if(c==='"'){if(q&&n==='"'){cell+='"';i++;}else q=!q;}else if(c===','&&!q){row.push(cell);cell='';}else if((c==='\n'||c==='\r')&&!q){if(c==='\r'&&n==='\n')i++;row.push(cell);cell='';if(row.some(v=>v.trim()!==''))out.push(row);row=[];}else cell+=c;}if(cell!==''||row.length){row.push(cell);if(row.some(v=>v.trim()!==''))out.push(row)}return out}
 function clean(v){return String(v??'').trim()}
-async function load(){let text='';for(const url of [CSV1,CSV2]){try{const r=await fetch(url+'&_='+Date.now(),{cache:'no-store'});if(r.ok){text=await r.text();if(text&&text.length>20)break}}catch(e){}}if(!text)throw new Error('Не удалось загрузить Google Sheet');const a=parseCSV(text);const h=a[0].map(clean);rows=a.slice(1).map(r=>{const o={};h.forEach((k,i)=>o[k]=clean(r[i]));return o}).filter(o=>Object.values(o).some(Boolean));renderFilters();render();document.getElementById('status').textContent='✓ Данные загружены · объектов: '+rows.length+' · тест карты без API-ключа'}
+async function load(){let text='';for(const url of [CSV1,CSV2]){try{const r=await fetch(url+'&_='+Date.now(),{cache:'no-store'});if(r.ok){text=await r.text();if(text&&text.length>20)break}}catch(e){}}if(!text)throw new Error('Не удалось загрузить Google Sheet');const a=parseCSV(text);const h=a[0].map(clean);rows=a.slice(1).map(r=>{const o={};h.forEach((k,i)=>o[k]=clean(r[i]));return o}).filter(o=>Object.values(o).some(Boolean));renderFilters();render();document.getElementById('status').textContent='✓ Данные загружены · объектов: '+rows.length+' · метки карты добавлены'}
 function val(o,names){for(const n of names){if(o[n])return o[n]}return ''}
 function renderFilters(){const statuses=[...new Set(rows.map(o=>val(o,['Статус'])).filter(Boolean))].sort();const districts=[...new Set(rows.map(o=>val(o,['Район'])).filter(Boolean))].sort();for(const [id,arr] of [['statusFilter',statuses],['districtFilter',districts]]){const s=document.getElementById(id);s.innerHTML='<option value="">'+(id==='statusFilter'?'Все статусы':'Все районы')+'</option>'+arr.map(x=>'<option>'+escapeHtml(x)+'</option>').join('')}}
 function escapeHtml(s){return String(s).replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
