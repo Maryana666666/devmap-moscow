@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>База объектов ASPACE — тест карты</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:#f5f6f8;color:#1f2937}.top{background:#111827;color:#fff;padding:16px 20px}.top h1{margin:0 0 5px;font-size:22px}.top .sub{opacity:.75;font-size:13px}.wrap{max-width:1400px;margin:auto;padding:14px}.status{background:#fff;border-radius:12px;padding:10px 12px;margin-bottom:12px;font-size:13px;box-shadow:0 1px 5px #0001}.filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}.filters input,.filters select{border:1px solid #d1d5db;border-radius:9px;padding:9px 11px;background:#fff;font-size:14px}.layout{display:grid;grid-template-columns:420px 1fr;gap:12px}.list{display:flex;flex-direction:column;gap:10px}.card{background:#fff;border-radius:12px;padding:13px;box-shadow:0 1px 5px #0001;cursor:pointer}.card:hover{box-shadow:0 3px 12px #0002}.name{font-weight:700;font-size:16px;margin-bottom:7px}.meta{font-size:13px;line-height:1.5;color:#4b5563}.badge{display:inline-block;padding:3px 7px;border-radius:999px;background:#eef2ff;font-size:11px;margin-bottom:7px}.mapbox{background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 5px #0001;min-height:620px}.mapbox iframe{width:100%;height:620px;border:0;display:block}.note{padding:10px 12px;background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;border-radius:10px;margin-bottom:12px;font-size:13px}.empty{padding:30px;text-align:center;color:#6b7280;background:#fff;border-radius:12px}.coords{font-size:12px;color:#6b7280;margin-top:5px}@media(max-width:900px){.layout{grid-template-columns:1fr}.mapbox{min-height:430px}.mapbox iframe{height:430px}}
+</style>
+</head>
+<body>
+<header class="top"><h1>База объектов ASPACE</h1><div class="sub">Тестовая версия: карта без ключа JavaScript API</div></header>
+<div class="wrap">
+<div id="status" class="status">Загрузка данных…</div>
+<div class="note">Это отдельная тестовая страница. Основная ссылка не изменена. Здесь карта Яндекса загружается через встроенный виджет, поэтому ключ из localStorage браузера не нужен.</div>
+<div class="filters">
+<input id="search" placeholder="Поиск по объектам…">
+<select id="statusFilter"><option value="">Все статусы</option></select>
+<select id="districtFilter"><option value="">Все районы</option></select>
+</div>
+<div class="layout">
+<section id="list" class="list"><div class="empty">Загрузка объектов…</div></section>
+<section class="mapbox"><iframe title="Яндекс Карты" src="https://yandex.ru/map-widget/v1/?ll=37.6176%2C55.7558&z=10&lang=ru_RU" allowfullscreen></iframe></section>
+</div>
+</div>
+<script>
+const CSV1='https://docs.google.com/spreadsheets/d/1Bv-VRTjRVrIiXGXC9AJR4JqS1y4VQECxD2BZEpDRUis/gviz/tq?tqx=out:csv&gid=0';
+const CSV2='https://docs.google.com/spreadsheets/d/e/2PACX-1vTB07y0UlTuKbTTIEFXMblZx_GVEiXKrVreOVq3n83nX4cpzxFnjNU64T2KSwQ3iQGUr_Y2-2aEFJRY/pub?output=csv';
+let rows=[];
+function parseCSV(text){const out=[];let row=[],cell='',q=false;for(let i=0;i<text.length;i++){const c=text[i],n=text[i+1];if(c==='"'){if(q&&n==='"'){cell+='"';i++;}else q=!q;}else if(c===','&&!q){row.push(cell);cell='';}else if((c==='\n'||c==='\r')&&!q){if(c==='\r'&&n==='\n')i++;row.push(cell);cell='';if(row.some(v=>v.trim()!==''))out.push(row);row=[];}else cell+=c;}if(cell!==''||row.length){row.push(cell);if(row.some(v=>v.trim()!==''))out.push(row)}return out}
+function clean(v){return String(v??'').trim()}
+async function load(){let text='';for(const url of [CSV1,CSV2]){try{const r=await fetch(url+'&_='+Date.now(),{cache:'no-store'});if(r.ok){text=await r.text();if(text&&text.length>20)break}}catch(e){}}if(!text)throw new Error('Не удалось загрузить Google Sheet');const a=parseCSV(text);const h=a[0].map(clean);rows=a.slice(1).map(r=>{const o={};h.forEach((k,i)=>o[k]=clean(r[i]));return o}).filter(o=>Object.values(o).some(Boolean));renderFilters();render();document.getElementById('status').textContent='✓ Данные загружены · объектов: '+rows.length+' · тест карты без API-ключа'}
+function val(o,names){for(const n of names){if(o[n])return o[n]}return ''}
+function renderFilters(){const statuses=[...new Set(rows.map(o=>val(o,['Статус'])).filter(Boolean))].sort();const districts=[...new Set(rows.map(o=>val(o,['Район'])).filter(Boolean))].sort();for(const [id,arr] of [['statusFilter',statuses],['districtFilter',districts]]){const s=document.getElementById(id);s.innerHTML='<option value="">'+(id==='statusFilter'?'Все статусы':'Все районы')+'</option>'+arr.map(x=>'<option>'+escapeHtml(x)+'</option>').join('')}}
+function escapeHtml(s){return String(s).replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function render(){const q=clean(document.getElementById('search').value).toLowerCase();const sf=document.getElementById('statusFilter').value;const df=document.getElementById('districtFilter').value;const data=rows.filter(o=>{const blob=Object.values(o).join(' ').toLowerCase();return(!q||blob.includes(q))&&(!sf||val(o,['Статус'])===sf)&&(!df||val(o,['Район'])===df)});const list=document.getElementById('list');if(!data.length){list.innerHTML='<div class="empty">Ничего не найдено</div>';return}list.innerHTML=data.map(o=>{const name=val(o,['Название проекта','Название','Проект'])||'Без названия';const status=val(o,['Статус'])||'—';const addr=val(o,['Адрес'])||'—';const metro=val(o,['Метро']);const district=val(o,['Район']);const lat=val(o,['Широта','lat']);const lon=val(o,['Долгота','lon']);return '<article class="card"><div class="badge">'+escapeHtml(status)+'</div><div class="name">'+escapeHtml(name)+'</div><div class="meta">'+escapeHtml(addr)+(district?' · '+escapeHtml(district):'')+(metro?' · м. '+escapeHtml(metro):'')+'</div>'+(lat&&lon?'<div class="coords">Координаты: '+escapeHtml(lat)+', '+escapeHtml(lon)+'</div>':'')+'</article>'}).join('')}
+document.getElementById('search').addEventListener('input',render);document.getElementById('statusFilter').addEventListener('change',render);document.getElementById('districtFilter').addEventListener('change',render);load().catch(e=>{document.getElementById('status').textContent='⚠ '+e.message;document.getElementById('list').innerHTML='<div class="empty">Не удалось загрузить данные из Google Sheets.</div>'});
+</script>
+</body></html>
