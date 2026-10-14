@@ -1,1 +1,151 @@
-<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>База объектов ASPACE</title><style>*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;color:#222;background:#f4f5f7}.app{min-height:100vh;display:grid;grid-template-columns:470px 1fr}.side{background:#fff;border-right:1px solid #ddd;display:flex;flex-direction:column;min-height:100vh;z-index:2}.head{padding:16px 18px;border-bottom:1px solid #eee}h1{margin:0 0 6px;font-size:20px}.muted{color:#777;font-size:12px;line-height:1.45}.sync{margin-top:10px;padding:8px 10px;border-radius:8px;background:#f5f7fa;font-size:12px}.toolbar,.filters{padding:9px 14px;border-bottom:1px solid #eee;display:flex;gap:7px;flex-wrap:wrap}.toolbar button{flex:1}button{border:1px solid #ccc;background:#fff;border-radius:8px;padding:8px 10px;cursor:pointer;font-size:12px}button.primary{background:#222;color:#fff;border-color:#222}input,select,textarea{font:inherit;border:1px solid #ccc;border-radius:7px;padding:8px;background:#fff;width:100%}.filters{display:grid}.list{overflow:auto;padding:8px;flex:1}.card{padding:11px;border:1px solid #e5e5e5;border-radius:9px;margin-bottom:7px;cursor:pointer;background:#fff}.title{font-weight:700;font-size:13px}.meta{font-size:11px;color:#666;margin-top:4px;line-height:1.4}.badge{margin-left:5px;padding:2px 6px;border-radius:10px;background:#eee;font-size:10px}.main{position:relative;min-width:0;background:#e5e7eb}.map{position:absolute;inset:0}.mapnote{position:absolute;z-index:10;left:14px;top:14px;background:#fff;padding:8px 11px;border-radius:9px;box-shadow:0 2px 10px #0002;font-size:12px}.modalbg{display:none;position:fixed;inset:0;background:#0005;z-index:2000;align-items:center;justify-content:center}.modal{background:#fff;border-radius:12px;padding:17px;width:min(820px,calc(100% - 24px));max-height:92vh;overflow:auto}.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.field{display:grid;gap:4px;font-size:11px;color:#666}.full{grid-column:1/-1}.urlbox{display:flex;gap:7px}.urlbox input{flex:1}.urlbox a{padding:8px 10px;border:1px solid #ccc;border-radius:7px;text-decoration:none;color:#222;white-space:nowrap;background:#f7f7f7}.empty{padding:18px;text-align:center;color:#777;font-size:12px}.mapError{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:30px;text-align:center;color:#555;background:#eef0f3}.mapErrorBox{max-width:520px;background:#fff;padding:22px;border-radius:12px;box-shadow:0 2px 14px #0002}.marker{width:18px;height:18px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:3px solid #fff;box-shadow:0 2px 8px #0005;cursor:pointer}.marker>span{display:block;width:6px;height:6px;border-radius:50%;background:#fff;margin:3px}.status-interest{background:#e67e22}.status-study{background:#3498db}.status-new{background:#27ae60}.status-hold{background:#9b59b6}.status-no{background:#777}@media(max-width:900px){.app{grid-template-columns:1fr;grid-template-rows:56vh 44vh}.side{min-height:0;grid-row:2}.main{min-height:0;grid-row:1}}</style></head><body><div class="app"><aside class="side"><div class="head"><h1>База объектов ASPACE</h1><div class="muted">Общая версия для коллег. Данные — Google Таблица, карта — Яндекс.</div><div class="sync" id="sync">Загружаю данные…</div></div><div class="toolbar"><button class="primary" onclick="loadData(true)">↻ Обновить</button><button onclick="openSheet()">↗ Открыть таблицу</button></div><div class="filters"><input id="q" placeholder="Поиск: проект, адрес, метро, агентство…" oninput="render()"><select id="status" onchange="render()"><option value="">Все статусы</option></select><select id="district" onchange="render()"><option value="">Все районы</option></select><select id="decision" onchange="render()"><option value="">Все решения</option></select></div><div id="list" class="list"></div></aside><main class="main"><div id="map" class="map"></div><div class="mapnote">Яндекс Карты · клик по точке открывает карточку</div></main></div><div id="modal" class="modalbg"><div class="modal"><h2 id="mt">Объект</h2><div id="form" class="grid"></div><div style="text-align:right;margin-top:14px"><button onclick="modal.style.display='none'">Закрыть</button></div></div></div><script>const SHEET_URL='https://docs.google.com/spreadsheets/d/1Bv-VRTjRVrIiXGXC9AJR4JqS1y4VQECxD2BZEpDRUis/edit?usp=sharing';const CSV_URLS=['https://docs.google.com/spreadsheets/d/1Bv-VRTjRVrIiXGXC9AJR4JqS1y4VQECxD2BZEpDRUis/gviz/tq?tqx=out:csv&gid=0','https://docs.google.com/spreadsheets/d/e/2PACX-1vTB07y0UlTuKbTTIEFXMblZx_GVEiXKrVreOVq3n83nX4cpzxFnjNU64T2KSwQ3iQGUr_Y2-2aEFJRY/pub?output=csv'];let data=[],cols=[],map=null,markers=[];const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));const col=(...a)=>a.map(x=>cols.find(c=>String(c).trim().toLowerCase()==x.toLowerCase())).find(Boolean)||'';const val=(p,c)=>c?(p[c]??''):'';const nameC=()=>col('Название проекта','Проект','Название'),statusC=()=>col('Статус'),districtC=()=>col('Район'),decisionC=()=>col('Решение'),addrC=()=>col('Адрес'),latC=()=>col('Широта','Latitude','lat'),lonC=()=>col('Долгота','Longitude','lon'),metroC=()=>col('Метро');function parseCSV(t){let a=[],row=[],cell='',q=false;for(let i=0;i<t.length;i++){let c=t[i];if(c==='"'){if(q&&t[i+1]==='"'){cell+='"';i++}else q=!q}else if(c===','&&!q){row.push(cell);cell=''}else if((c==='\n'||c==='\r')&&!q){if(c==='\r'&&t[i+1]==='\n')i++;row.push(cell);if(row.some(x=>x!==''))a.push(row);row=[];cell=''}else cell+=c}row.push(cell);if(row.some(x=>x!==''))a.push(row);if(!a.length)return[];let h=a[0],out=[];for(let i=1;i<a.length;i++){let p={};h.forEach((k,j)=>p[k]=a[i][j]??'');out.push(p)}return out}async function fetchText(u){let ctl=new AbortController(),tm=setTimeout(()=>ctl.abort(),9000);try{let r=await fetch(u+'&t='+Date.now(),{cache:'no-store',signal:ctl.signal});if(!r.ok)throw Error('HTTP '+r.status);return await r.text()}finally{clearTimeout(tm)}}async function loadData(manual=false){$('sync').textContent='Обновляю данные…';let last='';for(let u of CSV_URLS){try{let text=await fetchText(u),rs=parseCSV(text);if(!rs.length)throw Error('таблица пуста');cols=Object.keys(rs[0]);data=rs;render();$('sync').textContent='✓ Обновлено: '+new Date().toLocaleTimeString('ru-RU')+' · объектов: '+data.length;return}catch(e){last=e.message}}$('sync').textContent='Ошибка загрузки данных: '+last;if(manual)alert('Не удалось загрузить Google Таблицу. Нажмите «Открыть таблицу» и проверьте, что она доступна.')}function renderFilters(){[['status',statusC(),'Все статусы'],['district',districtC(),'Все районы'],['decision',decisionC(),'Все решения']].forEach(([id,c,first])=>{let e=$(id),old=e.value,vs=[...new Set(data.map(p=>String(val(p,c)).trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ru'));e.innerHTML='<option value="">'+first+'</option>'+vs.map(v=>'<option>'+esc(v)+'</option>').join('');if(vs.includes(old))e.value=old})}function rows(){let q=$('q').value.toLowerCase(),s=$('status').value,d=$('district').value,r=$('decision').value;return data.map((p,i)=>({p,i})).filter(({p})=>(!q||cols.map(c=>val(p,c)).join(' ').toLowerCase().includes(q))&&(!s||val(p,statusC())===s)&&(!d||val(p,districtC())===d)&&(!r||val(p,decisionC())===r)}function render(){renderFilters();let rs=rows();$('list').innerHTML=rs.length?rs.map(({p,i})=>'<div class="card" onclick="openProject('+i+');focusProject('+i+')"><div class="title">'+esc(val(p,nameC())||'Без названия')+(val(p,statusC())?'<span class="badge">'+esc(val(p,statusC()))+'</span>':'')+'</div><div class="meta">'+esc(val(p,addrC()))+(val(p,metroC())?' · м. '+esc(val(p,metroC())):'')+'</div></div>').join(''):'<div class="empty">Объектов не найдено</div>';renderMap()}function markerClass(s){s=String(s).toLowerCase();if(s.includes('интерес'))return'status-interest';if(s.includes('изуч'))return'status-study';if(s.includes('нов'))return'status-new';if(s.includes('отлож'))return'status-hold';return'status-no'}function renderMap(){if(!map)return;markers.forEach(m=>{try{map.removeChild(m)}catch(e){}});markers=[];let pts=[];rows().forEach(({p,i})=>{let lat=parseFloat(String(val(p,latC())).replace(',','.')),lon=parseFloat(String(val(p,lonC())).replace(',','.'));if(!Number.isFinite(lat)||!Number.isFinite(lon))return;let el=document.createElement('div');el.className='marker '+markerClass(val(p,statusC()));el.innerHTML='<span></span>';el.title=val(p,nameC())||'Объект';el.onclick=ev=>{ev.stopPropagation();openProject(i);map.setLocation({center:[lon,lat],zoom:14,duration:250})};let m=new ymaps3.YMapMarker({coordinates:[lon,lat],zIndex:100},el);map.addChild(m);markers.push(m);pts.push([lon,lat])});if(pts.length===1)map.setLocation({center:pts[0],zoom:13});else if(pts.length>1){let a=pts.map(x=>x[0]),b=pts.map(x=>x[1]);map.setLocation({bounds:[[Math.min(...a),Math.min(...b)],[Math.max(...a),Math.max(...b)]],duration:250})}else map.setLocation({center:[37.618423,55.751244],zoom:10})}function focusProject(i){let p=data[i],lat=parseFloat(String(val(p,latC())).replace(',','.')),lon=parseFloat(String(val(p,lonC())).replace(',','.'));if(map&&Number.isFinite(lat)&&Number.isFinite(lon))map.setLocation({center:[lon,lat],zoom:14,duration:250})}function openProject(i){let p=data[i];if(!p)return;$('mt').textContent=val(p,nameC())||'Объект';$('form').innerHTML=cols.map(c=>{let v=val(p,c),url=/^https?:\/\//i.test(String(v));let ctl=url?'<div class="urlbox"><input value="'+esc(v)+'" readonly><a href="'+esc(v)+'" target="_blank" rel="noopener">Открыть</a></div>':'<input value="'+esc(v)+'" readonly>';return'<label class="field '+(/адрес|ссылка|комментар|следующее действие/i.test(c)?'full':'')+'">'+esc(c)+ctl+'</label>'}).join('');$('modal').style.display='flex'}function openSheet(){window.open(SHEET_URL,'_blank')}function mapError(msg){$('map').innerHTML='<div class="mapError"><div class="mapErrorBox"><b>Яндекс Карта не загрузилась</b><div style="margin:10px 0 14px;line-height:1.5">'+esc(msg)+'</div><button onclick="initMap(true)">Повторить</button></div></div>'}function initMap(force){if(map)return;let key=localStorage.getItem('dev_yandex_key_v3')||'';if(!key){mapError('В этом браузере не найден ключ JavaScript API Яндекс.');return}let s=document.createElement('script');s.src='https://api-maps.yandex.ru/v3/?apikey='+encodeURIComponent(key)+'&lang=ru_RU';s.onload=async()=>{try{await ymaps3.ready;let{YMap,YMapDefaultSchemeLayer,YMapDefaultFeaturesLayer}=ymaps3;map=new YMap($('map'),{location:{center:[37.618423,55.751244],zoom:10}},[new YMapDefaultSchemeLayer({}),new YMapDefaultFeaturesLayer({})]);renderMap()}catch(e){mapError(e.message)}};s.onerror=()=>mapError('Не удалось загрузить api-maps.yandex.ru. Проверьте VPN/сеть и ограничения HTTP Referer для ключа.');document.head.appendChild(s)}loadData(false);initMap();setInterval(()=>loadData(false),60000);</script></body></html>
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>База объектов ASPACE</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;color:#222;background:#f4f5f7}.app{min-height:100vh;display:grid;grid-template-columns:470px 1fr}.side{background:#fff;border-right:1px solid #ddd;display:flex;flex-direction:column;min-height:100vh;z-index:2}.head{padding:16px 18px;border-bottom:1px solid #eee}h1{margin:0 0 6px;font-size:20px}.muted{color:#777;font-size:12px}.sync{margin-top:10px;padding:8px 10px;border-radius:8px;background:#f5f7fa;font-size:12px}.toolbar,.filters{padding:9px 14px;border-bottom:1px solid #eee;display:flex;gap:7px;flex-wrap:wrap}.toolbar button{flex:1}button{border:1px solid #ccc;background:#fff;border-radius:8px;padding:8px 10px;cursor:pointer;font-size:12px}button.primary{background:#222;color:#fff;border-color:#222}input,select{font:inherit;border:1px solid #ccc;border-radius:7px;padding:8px;background:#fff;width:100%}.filters{display:grid}.list{overflow:auto;padding:8px;flex:1}.card{padding:11px;border:1px solid #e5e5e5;border-radius:9px;margin-bottom:7px;cursor:pointer;background:#fff}.title{font-weight:700;font-size:13px}.meta{font-size:11px;color:#666;margin-top:4px;line-height:1.4}.badge{margin-left:5px;padding:2px 6px;border-radius:10px;background:#eee;font-size:10px}.main{position:relative;min-width:0;background:#e5e7eb}.map{position:absolute;inset:0}.mapnote{position:absolute;z-index:10;left:14px;top:14px;background:#fff;padding:8px 11px;border-radius:9px;box-shadow:0 2px 10px #0002;font-size:12px}.modalbg{display:none;position:fixed;inset:0;background:#0005;z-index:2000;align-items:center;justify-content:center}.modal{background:#fff;border-radius:12px;padding:17px;width:min(820px,calc(100% - 24px));max-height:92vh;overflow:auto}.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.field{display:grid;gap:4px;font-size:11px;color:#666}.full{grid-column:1/-1}.urlbox{display:flex;gap:7px}.urlbox input{flex:1}.urlbox a{padding:8px 10px;border:1px solid #ccc;border-radius:7px;text-decoration:none;color:#222;background:#f7f7f7}.empty{padding:18px;text-align:center;color:#777;font-size:12px}.mapError{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:30px;text-align:center;color:#555;background:#eef0f3}.mapErrorBox{max-width:520px;background:#fff;padding:22px;border-radius:12px;box-shadow:0 2px 14px #0002}.marker{width:18px;height:18px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:3px solid #fff;box-shadow:0 2px 8px #0005;cursor:pointer}.marker>span{display:block;width:6px;height:6px;border-radius:50%;background:#fff;margin:3px}.status-interest{background:#e67e22}.status-study{background:#3498db}.status-new{background:#27ae60}.status-hold{background:#9b59b6}.status-no{background:#777}@media(max-width:900px){.app{grid-template-columns:1fr;grid-template-rows:56vh 44vh}.side{min-height:0;grid-row:2}.main{min-height:0;grid-row:1}}
+</style>
+</head>
+<body>
+<div class="app">
+<aside class="side">
+<div class="head"><h1>База объектов ASPACE</h1><div class="muted">Общая версия для коллег. Данные — Google Таблица, карта — Яндекс.</div><div class="sync" id="sync">Загружаю данные…</div></div>
+<div class="toolbar"><button class="primary" onclick="loadData(true)">↻ Обновить</button><button onclick="openSheet()">↗ Открыть таблицу</button></div>
+<div class="filters"><input id="q" placeholder="Поиск: проект, адрес, метро, агентство…" oninput="render()"><select id="status" onchange="render()"><option value="">Все статусы</option></select><select id="district" onchange="render()"><option value="">Все районы</option></select><select id="decision" onchange="render()"><option value="">Все решения</option></select></div>
+<div id="list" class="list"></div>
+</aside>
+<main class="main"><div id="map" class="map"></div><div class="mapnote">Яндекс Карты · клик по точке открывает карточку</div></main>
+</div>
+<div id="modal" class="modalbg"><div class="modal"><h2 id="mt">Объект</h2><div id="form" class="grid"></div><div style="text-align:right;margin-top:14px"><button onclick="document.getElementById('modal').style.display='none'">Закрыть</button></div></div></div>
+<script>
+const SHEET_URL='https://docs.google.com/spreadsheets/d/1Bv-VRTjRVrIiXGXC9AJR4JqS1y4VQECxD2BZEpDRUis/edit?usp=sharing';
+const CSV_URLS=[
+'https://docs.google.com/spreadsheets/d/1Bv-VRTjRVrIiXGXC9AJR4JqS1y4VQECxD2BZEpDRUis/gviz/tq?tqx=out:csv&gid=0',
+'https://docs.google.com/spreadsheets/d/e/2PACX-1vTB07y0UlTuKbTTIEFXMblZx_GVEiXKrVreOVq3n83nX4cpzxFnjNU64T2KSwQ3iQGUr_Y2-2aEFJRY/pub?output=csv'
+];
+let data=[],cols=[],map=null,markers=[];
+const $=id=>document.getElementById(id);
+function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));}
+function col(){for(const wanted of arguments){const found=cols.find(c=>String(c).trim().toLowerCase()===String(wanted).toLowerCase());if(found)return found}return ''}
+function val(p,c){return c?(p[c]||''):''}
+const nameC=()=>col('Название проекта','Проект','Название');
+const statusC=()=>col('Статус');
+const districtC=()=>col('Район');
+const decisionC=()=>col('Решение');
+const addrC=()=>col('Адрес');
+const latC=()=>col('Широта','Latitude','lat');
+const lonC=()=>col('Долгота','Longitude','lon');
+const metroC=()=>col('Метро');
+function parseCSV(t){
+ let rows=[],row=[],cell='',quoted=false;
+ for(let i=0;i<t.length;i++){
+  const ch=t[i];
+  if(ch==='"'){
+   if(quoted&&t[i+1]==='"'){cell+='"';i++;}else quoted=!quoted;
+  }else if(ch===','&&!quoted){row.push(cell);cell='';}
+  else if((ch==='\n'||ch==='\r')&&!quoted){if(ch==='\r'&&t[i+1]==='\n')i++;row.push(cell);if(row.some(x=>x!==''))rows.push(row);row=[];cell='';}
+  else cell+=ch;
+ }
+ row.push(cell);if(row.some(x=>x!==''))rows.push(row);
+ if(!rows.length)return [];
+ const headers=rows[0];
+ return rows.slice(1).map(r=>{const p={};headers.forEach((h,i)=>p[h]=r[i]??'');return p;});
+}
+async function fetchText(url){
+ const controller=new AbortController();
+ const timer=setTimeout(()=>controller.abort(),8000);
+ try{const join=url.includes('?')?'&':'?';const res=await fetch(url+join+'_='+Date.now(),{cache:'no-store',mode:'cors',signal:controller.signal});if(!res.ok)throw new Error('HTTP '+res.status);return await res.text();}
+ finally{clearTimeout(timer);}
+}
+async function loadData(manual){
+ $('sync').textContent='Обновляю данные…';
+ let last='';
+ for(const url of CSV_URLS){
+  try{
+   const text=await fetchText(url);
+   const rows=parseCSV(text);
+   if(!rows.length)throw new Error('таблица пуста');
+   cols=Object.keys(rows[0]);data=rows;render();
+   $('sync').textContent='✓ Обновлено: '+new Date().toLocaleTimeString('ru-RU')+' · объектов: '+data.length;
+   return;
+  }catch(e){last=e&&e.message?e.message:'ошибка';}
+ }
+ $('sync').textContent='Ошибка загрузки данных: '+last;
+ if(manual)alert('Не удалось загрузить данные Google Таблицы. Откройте таблицу кнопкой справа и проверьте доступ.');
+}
+function renderFilters(){
+ [['status',statusC(),'Все статусы'],['district',districtC(),'Все районы'],['decision',decisionC(),'Все решения']].forEach(([id,c,first])=>{
+  const el=$(id),old=el.value,values=[...new Set(data.map(p=>String(val(p,c)).trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ru'));
+  el.innerHTML='<option value="">'+first+'</option>'+values.map(v=>'<option value="'+esc(v)+'">'+esc(v)+'</option>').join('');
+  if(values.includes(old))el.value=old;
+ });
+}
+function filteredRows(){
+ const q=$('q').value.trim().toLowerCase(),s=$('status').value,d=$('district').value,r=$('decision').value;
+ return data.map((p,i)=>({p,i})).filter(({p})=>{
+  const all=cols.map(c=>val(p,c)).join(' ').toLowerCase();
+  return (!q||all.includes(q))&&(!s||val(p,statusC())===s)&&(!d||val(p,districtC())===d)&&(!r||val(p,decisionC())===r);
+ });
+}
+function render(){
+ renderFilters();
+ const rs=filteredRows();
+ $('list').innerHTML=rs.length?rs.map(({p,i})=>'<div class="card" onclick="openProject('+i+');focusProject('+i+')"><div class="title">'+esc(val(p,nameC())||'Без названия')+(val(p,statusC())?'<span class="badge">'+esc(val(p,statusC()))+'</span>':'')+'</div><div class="meta">'+esc(val(p,addrC()))+(val(p,metroC())?' · м. '+esc(val(p,metroC())):'')+'</div></div>').join(''):'<div class="empty">Объектов не найдено</div>';
+ renderMap();
+}
+function markerClass(s){s=String(s).toLowerCase();if(s.includes('интерес'))return'status-interest';if(s.includes('изуч'))return'status-study';if(s.includes('нов'))return'status-new';if(s.includes('отлож'))return'status-hold';return'status-no'}
+function renderMap(){
+ if(!map)return;
+ markers.forEach(m=>{try{map.removeChild(m)}catch(e){}});markers=[];
+ const pts=[];
+ filteredRows().forEach(({p,i})=>{
+  const lat=parseFloat(String(val(p,latC())).replace(',','.')),lon=parseFloat(String(val(p,lonC())).replace(',','.'));
+  if(!Number.isFinite(lat)||!Number.isFinite(lon))return;
+  const el=document.createElement('div');el.className='marker '+markerClass(val(p,statusC()));el.innerHTML='<span></span>';el.title=val(p,nameC())||'Объект';
+  el.onclick=e=>{e.stopPropagation();openProject(i);map.setLocation({center:[lon,lat],zoom:14,duration:250});};
+  const marker=new ymaps3.YMapMarker({coordinates:[lon,lat],zIndex:100},el);map.addChild(marker);markers.push(marker);pts.push([lon,lat]);
+ });
+ if(pts.length===1)map.setLocation({center:pts[0],zoom:13});
+ else if(pts.length>1){const xs=pts.map(p=>p[0]),ys=pts.map(p=>p[1]);map.setLocation({bounds:[[Math.min(...xs),Math.min(...ys)],[Math.max(...xs),Math.max(...ys)]],duration:250});}
+ else map.setLocation({center:[37.618423,55.751244],zoom:10});
+}
+function focusProject(i){const p=data[i];if(!p||!map)return;const lat=parseFloat(String(val(p,latC())).replace(',','.')),lon=parseFloat(String(val(p,lonC())).replace(',','.'));if(Number.isFinite(lat)&&Number.isFinite(lon))map.setLocation({center:[lon,lat],zoom:14,duration:250});}
+function openProject(i){
+ const p=data[i];if(!p)return;
+ $('mt').textContent=val(p,nameC())||'Объект';
+ $('form').innerHTML=cols.map(c=>{
+  const v=val(p,c),isUrl=/^https?:\/\//i.test(String(v));
+  const control=isUrl?'<div class="urlbox"><input value="'+esc(v)+'" readonly><a href="'+esc(v)+'" target="_blank" rel="noopener">Открыть</a></div>':'<input value="'+esc(v)+'" readonly>';
+  const full=/адрес|ссылка|комментар|следующее действие/i.test(c)?'full':'';
+  return '<label class="field '+full+'">'+esc(c)+control+'</label>';
+ }).join('');
+ $('modal').style.display='flex';
+}
+function openSheet(){window.open(SHEET_URL,'_blank');}
+function mapError(msg){$('map').innerHTML='<div class="mapError"><div class="mapErrorBox"><b>Яндекс Карта не загрузилась</b><div style="margin:10px 0 14px;line-height:1.5">'+esc(msg)+'</div><button onclick="initMap()">Повторить</button></div></div>';}
+function initMap(){
+ if(map)return;
+ const key=localStorage.getItem('dev_yandex_key_v3')||'';
+ if(!key){mapError('В этом браузере не найден ключ JavaScript API Яндекс.');return;}
+ if(document.querySelector('script[data-yandex-map]'))return;
+ const script=document.createElement('script');script.dataset.yandexMap='1';script.src='https://api-maps.yandex.ru/v3/?apikey='+encodeURIComponent(key)+'&lang=ru_RU';
+ script.onload=()=>{
+  if(!window.ymaps3){mapError('API Яндекс загрузилось, но объект ymaps3 не найден.');return;}
+  const readyTimeout=new Promise((_,reject)=>setTimeout(()=>reject(new Error('Яндекс Карты не ответили за 10 секунд. Проверьте VPN/сеть.')),10000));
+  Promise.race([ymaps3.ready,readyTimeout]).then(()=>{
+   const YMap=ymaps3.YMap,YMapDefaultSchemeLayer=ymaps3.YMapDefaultSchemeLayer,YMapDefaultFeaturesLayer=ymaps3.YMapDefaultFeaturesLayer;
+   map=new YMap($('map'),{location:{center:[37.618423,55.751244],zoom:10}},[new YMapDefaultSchemeLayer({}),new YMapDefaultFeaturesLayer({})]);
+   renderMap();
+  }).catch(e=>mapError(e.message||'Ошибка инициализации карты'));
+ };
+ script.onerror=()=>mapError('Не удалось загрузить api-maps.yandex.ru. Проверьте VPN/сеть и ограничения HTTP Referer для ключа.');
+ document.head.appendChild(script);
+}
+loadData(false);
+initMap();
+setInterval(()=>loadData(false),60000);
+</script>
+</body>
+</html>
