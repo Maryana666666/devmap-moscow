@@ -1,0 +1,49 @@
+name: Fix map interaction
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.event.head_commit.message != 'Fix map interaction and markers'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch responsive_nokey.html
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('responsive_nokey.html')
+          s=p.read_text(encoding='utf-8')
+          s=s.replace('.map iframe{width:100%;height:100%;border:0;display:block;pointer-events:none}', '.map iframe{width:100%;height:100%;border:0;display:block;pointer-events:none}.maptools{position:absolute;z-index:40;right:14px;top:14px;display:flex;flex-direction:column;gap:5px}.maptools button{width:42px;height:42px;padding:0;font-size:22px;background:#fff;box-shadow:0 2px 8px #0002}.maptools .fit{font-size:16px}.map-hit{position:absolute;inset:0;z-index:10;cursor:grab}.map-hit.dragging{cursor:grabbing}')
+          s=s.replace('<div class="mapnote">Нажмите на метку проекта — откроется карточка</div>', '<div class="mapnote">Синие метки — проекты из таблицы</div><div class="maptools"><button onclick="zoomMap(1)">+</button><button onclick="zoomMap(-1)">−</button><button class="fit" onclick="fitMap()">⌖</button></div><div id="mapHit" class="map-hit"></div>')
+          start=s.index('function mapUrl(')
+          end=s.index('function render()', start)
+          block=r'''let centerLon=37.618423,centerLat=55.751244,zoom=10;
+function pts(rs){return rs.map(({p,i})=>{const lat=parseFloat(String(val(p,latC())).replace(',','.')),lon=parseFloat(String(val(p,lonC())).replace(',','.'));return Number.isFinite(lat)&&Number.isFinite(lon)?{lat,lon,p,i}:null}).filter(Boolean)}
+function proj(lat,lon){const w=$('map').clientWidth,h=$('map').clientHeight,sc=256*Math.pow(2,zoom);const x=(lon+180)/360*sc,y=(1-Math.log(Math.tan(lat*Math.PI/180)+1/Math.cos(lat*Math.PI/180))/Math.PI)/2*sc,cx=(centerLon+180)/360*sc,cy=(1-Math.log(Math.tan(centerLat*Math.PI/180)+1/Math.cos(centerLat*Math.PI/180))/Math.PI)/2*sc;return{x:w/2+x-cx,y:h/2+y-cy}}
+function mapSrc(){return 'https://yandex.ru/map-widget/v1/?ll='+encodeURIComponent(centerLon+','+centerLat)+'&z='+zoom+'&lang=ru_RU&l=map'}
+function drawMap(reload=true){if(reload)$('map').innerHTML='<iframe title="Яндекс Карты" src="'+mapSrc()+'" allowfullscreen loading="eager"></iframe>';drawMarkers()}
+function drawMarkers(){const layer=document.querySelector('.markers');if(!layer)return;layer.innerHTML='';pts(filteredRows()).forEach(({lat,lon,p,i})=>{const q=proj(lat,lon),m=document.createElement('button');m.className='marker';m.style.left=q.x+'px';m.style.top=q.y+'px';m.title=val(p,nameC())||'Проект';m.innerHTML='<span>'+esc(val(p,nameC())||'Проект')+'</span>';m.onclick=e=>{e.stopPropagation();openProject(i)};layer.appendChild(m)})}
+function fitMap(){const a=pts(filteredRows());if(!a.length){centerLon=37.618423;centerLat=55.751244;zoom=10;drawMap();return}let minX=a[0].lon,maxX=a[0].lon,minY=a[0].lat,maxY=a[0].lat;a.forEach(q=>{minX=Math.min(minX,q.lon);maxX=Math.max(maxX,q.lon);minY=Math.min(minY,q.lat);maxY=Math.max(maxY,q.lat)});centerLon=(minX+maxX)/2;centerLat=(minY+maxY)/2;const span=Math.max(maxX-minX,(maxY-minY)*1.5,0.03);zoom=Math.max(8,Math.min(15,Math.floor(Math.log2(360/(span*2)))));drawMap()}
+function zoomMap(d){zoom=Math.max(8,Math.min(17,zoom+d));drawMap()}
+function enableMapDrag(){const hit=$('mapHit');if(!hit)return;let drag=null;hit.onpointerdown=e=>{drag={x:e.clientX,y:e.clientY,lon:centerLon,lat:centerLat};hit.classList.add('dragging');hit.setPointerCapture(e.pointerId)};hit.onpointermove=e=>{if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y,sc=256*Math.pow(2,zoom);centerLon=drag.lon-dx*360/sc;centerLat=drag.lat+dy*360/sc;const f=document.querySelector('#map iframe');if(f)f.style.transform='translate('+dx+'px,'+dy+'px)';drawMarkers()};hit.onpointerup=e=>{if(!drag)return;drag=null;hit.classList.remove('dragging');drawMap()};hit.onpointercancel=hit.onpointerup;hit.onwheel=e=>{e.preventDefault();zoomMap(e.deltaY<0?1:-1)} }
+function updateMap(rs){$('map').innerHTML='<iframe title="Яндекс Карты" src="'+mapSrc()+'" allowfullscreen loading="eager"></iframe><div class="markers" id="markers"></div>';drawMarkers();enableMapDrag()}
+'''
+          s=s[:start]+block+s[end:]
+          s=s.replace('updateMap(rs)', 'fitMap()', 1)
+          p.write_text(s,encoding='utf-8')
+          PY
+      - name: Commit fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add responsive_nokey.html
+          git diff --cached --quiet && exit 0
+          git commit -m "Fix map interaction and markers"
+          git push
